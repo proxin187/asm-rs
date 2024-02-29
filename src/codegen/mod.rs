@@ -105,7 +105,6 @@ impl Codegen {
                         self.label = ident;
                     },
                     Inst::Mov { lhs, rhs } => {
-                        // file:///home/proxin/Downloads/325383-sdm-vol-2abcd.pdf#page=769
                         if let Value::Register(rd) = lhs {
                             if let Value::Integer(id) = rhs {
                                 // B8+ rd id
