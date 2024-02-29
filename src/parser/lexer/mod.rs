@@ -10,6 +10,8 @@ pub enum Keyword {
     Cmp,
 
     Je,
+    Jg,
+    Jb,
     Jmp,
 
     Mov,
@@ -64,6 +66,8 @@ impl Lexer {
 
             "jmp" => Ok(Token::Keyword(Keyword::Jmp)),
             "je" => Ok(Token::Keyword(Keyword::Je)),
+            "jg" => Ok(Token::Keyword(Keyword::Jg)),
+            "jb" => Ok(Token::Keyword(Keyword::Jb)),
 
             "cmp" => Ok(Token::Keyword(Keyword::Cmp)),
 

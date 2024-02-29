@@ -157,6 +157,8 @@ impl Codegen {
                     },
                     Inst::Jmp { label } => self.encode_jcc(&[0xe9], label)?,
                     Inst::Je { label } => self.encode_jcc(&[0x0f, 0x84], label)?,
+                    Inst::Jg { label } => self.encode_jcc(&[0x0f, 0x8f], label)?,
+                    Inst::Jb { label } => self.encode_jcc(&[0x0f, 0x82], label)?,
                     Inst::Syscall => {
                         self.buf.extend(&[0x0f, 0x05]);
                         self.preprocessor.offset += 2;

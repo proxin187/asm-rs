@@ -36,6 +36,8 @@ pub enum Inst {
 
     Jmp { label: String },
     Je { label: String },
+    Jg { label: String },
+    Jb { label: String },
 
     Mov {
         lhs: Value,
@@ -121,6 +123,8 @@ impl Parser {
                             })),
                             Keyword::Jmp => Ok(Some(Inst::Jmp { label: self.parse_jcc(&tokens)? })),
                             Keyword::Je => Ok(Some(Inst::Je { label: self.parse_jcc(&tokens)? })),
+                            Keyword::Jg => Ok(Some(Inst::Jg { label: self.parse_jcc(&tokens)? })),
+                            Keyword::Jb => Ok(Some(Inst::Jb { label: self.parse_jcc(&tokens)? })),
                             Keyword::Syscall => Ok(Some(Inst::Syscall)),
                         }
                     },

@@ -66,7 +66,7 @@ impl Preprocessor {
                         }
                     },
                     Inst::Jmp { .. } => self.offset += 5,
-                    Inst::Je { .. } => self.offset += 6,
+                    Inst::Je { .. } | Inst::Jg { .. } | Inst::Jb { .. } => self.offset += 6,
                     Inst::Syscall => self.offset += 2,
 
                     Inst::Eof => {
