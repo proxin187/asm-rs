@@ -1,0 +1,23 @@
+
+_start:
+    mov ecx, 0
+
+    mov ebx, 1
+    mov edx, 2
+
+loop:
+    cmp ecx, 5
+    je last
+
+    mov eax, edx
+    add edx, ebx
+    mov ebx, eax
+
+    add ecx, 1
+    jmp loop
+
+last:
+    mov edi, edx
+    mov eax, 60
+    syscall
+
