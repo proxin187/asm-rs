@@ -19,7 +19,7 @@ impl SplitTokens {
                 rhs: tokens[comma + 1..].to_vec(),
             })
         } else {
-            Err("> error: expected `,` between expressions".into())
+            Err("expected `,` between expressions".into())
         }
     }
 }
@@ -39,6 +39,12 @@ pub enum Inst {
     Jg { label: String },
     Jb { label: String },
 
+    Push {
+        value: Value,
+    },
+    Pop {
+        dest: Register,
+    },
     Mov {
         lhs: Value,
         rhs: Value,
@@ -71,10 +77,10 @@ impl Parser {
         if let Some(token) = tokens.get(1) {
             match token {
                 Token::Symbol(Symbol::Colon) => Ok(Inst::Label { ident: ident.to_string() }),
-                _ => Err(format!("> error: no such instruction `{}`", ident).into()),
+                _ => Err(format!("no such instruction `{}`", ident).into()),
             }
         } else {
-            Err(format!("> error: no such instruction `{}`", ident).into())
+            Err(format!("no such instruction `{}`", ident).into())
         }
     }
 
@@ -83,11 +89,22 @@ impl Parser {
             match prefix {
                 Token::Register(reg) => return Ok(Value::Register(*reg)),
                 Token::Int(integer) => return Ok(Value::Integer(*integer)),
-                _ => return Err(format!("> error: unexpected token `{:?}`", prefix).into()),
+                _ => return Err(format!("unexpected token `{:?}`", prefix).into()),
             }
         }
 
-        Err("> error: empty expression".into())
+        Err("empty expression".into())
+    }
+
+    fn parse_reg(&mut self, expr: &[Token]) -> Result<Register, Box<dyn std::error::Error>> {
+        if let Some(prefix) = expr.first() {
+            match prefix {
+                Token::Register(reg) => return Ok(*reg),
+                _ => return Err("expected register".into()),
+            }
+        }
+
+        Err("empty expression".into())
     }
 
     fn parse_jcc(&mut self, tokens: &[Token]) -> Result<String, Box<dyn std::error::Error>> {
@@ -97,7 +114,7 @@ impl Parser {
             }
         }
 
-        Err("> error: expected label in jcc instruction".into())
+        Err("expected label in jcc instruction".into())
     }
 
     pub fn next_inst(&mut self) -> Result<Option<Inst>, Box<dyn std::error::Error>> {
@@ -109,6 +126,12 @@ impl Parser {
                         tokens.remove(0);
 
                         match keyword {
+                            Keyword::Push => Ok(Some(Inst::Push {
+                                value: self.parse_expr(&tokens)?,
+                            })),
+                            Keyword::Pop => Ok(Some(Inst::Pop {
+                                dest: self.parse_reg(&tokens)?,
+                            })),
                             Keyword::Mov => Ok(Some(Inst::Mov {
                                 lhs: self.parse_expr(&SplitTokens::new(&tokens)?.lhs)?,
                                 rhs: self.parse_expr(&SplitTokens::new(&tokens)?.rhs)?
@@ -129,7 +152,7 @@ impl Parser {
                         }
                     },
                     Token::Eof => Ok(Some(Inst::Eof)),
-                    _ => Err(format!("> error: unexpected token `{:?}`", prefix).into()),
+                    _ => Err(format!("unexpected token `{:?}`", prefix).into()),
                 };
             }
         }

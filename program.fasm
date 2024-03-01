@@ -17,7 +17,11 @@ loop:
     jmp loop
 
 last:
+    push ecx
+    pop ecx
+
     mov edi, edx
     mov eax, 60
     syscall
+
 

@@ -14,7 +14,7 @@ use std::fs::File;
 pub struct Codegen {
     obj: Artifact,
     parser: Parser,
-    preprocessor: Preprocessor,
+    pub preprocessor: Preprocessor,
     buf: Vec<u8>,
     label: String,
     pub line: usize,
@@ -27,8 +27,6 @@ impl Codegen {
 
         preprocessor.preprocess(&mut parser)?;
         parser.lexer.rewind()?;
-
-        println!("offsets: {:#x?}", preprocessor.offsets);
 
         Ok(Codegen {
             obj: ArtifactBuilder::new(triple!("x86_64-unknown-unknown-unknown-elf"))
@@ -85,7 +83,7 @@ impl Codegen {
 
             Ok(())
         } else {
-            Err(format!("> error: no such label `{}`", label).into())
+            Err(format!("no such label `{}`", label).into())
         }
     }
 
@@ -104,6 +102,21 @@ impl Codegen {
 
                         self.label = ident;
                     },
+                    Inst::Push { value } => {
+                        if let Value::Integer(id) = value {
+                            // 68 id
+                            self.buf.extend(&[vec![0x68], Self::to_bytes(id)].concat());
+                            self.preprocessor.offset += 5;
+                        } else if let Value::Register(rd) = value {
+                            // FF /6
+                            self.buf.extend(&[0xff, Self::format_modrm(3, 6, Self::rm(rd))]);
+                            self.preprocessor.offset += 2;
+                        }
+                    },
+                    Inst::Pop { dest } => {
+                        // 58+ rd
+                        self.buf.extend(&[0x58 + Self::rm(dest)]);
+                    },
                     Inst::Mov { lhs, rhs } => {
                         if let Value::Register(rd) = lhs {
                             if let Value::Integer(id) = rhs {
@@ -116,7 +129,7 @@ impl Codegen {
                                 self.preprocessor.offset += 2;
                             }
                         } else {
-                            return Err("> error: cant move into non-register".into());
+                            return Err("cant move into non-register".into());
                         }
                     },
                     Inst::Add { lhs, rhs } => {
@@ -137,7 +150,7 @@ impl Codegen {
                                 self.preprocessor.offset += 2;
                             }
                         } else {
-                            return Err("> error: cant add into non-register".into());
+                            return Err("cant add into non-register".into());
                         }
                     },
                     Inst::Cmp { lhs, rhs } => {
@@ -152,7 +165,7 @@ impl Codegen {
                                 self.preprocessor.offset += 2;
                             }
                         } else {
-                            return Err("> error: cant cmp non register".into());
+                            return Err("cant cmp non register".into());
                         }
                     },
                     Inst::Jmp { label } => self.encode_jcc(&[0xe9], label)?,
@@ -178,16 +191,18 @@ impl Codegen {
     }
 
     pub fn emit(&mut self, file: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let fd = File::create(file)?;
+        let file = file.split('.').next().unwrap_or("object");
+        let fd = File::create([file, ".o"].concat())?;
 
         self.build()?;
         self.obj.write(fd)?;
 
         Command::new("ld")
-            .args(["-o", "program", "program.o"])
+            .args(["-o", file, &[file, ".o"].concat()])
             .spawn()?;
 
         Ok(())
     }
 }
+
 

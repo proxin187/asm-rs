@@ -7,15 +7,18 @@ use std::fs::File;
 pub enum Keyword {
     Syscall,
 
-    Cmp,
-
     Je,
     Jg,
     Jb,
     Jmp,
+    Cmp,
 
     Mov,
     Add,
+
+    Pop,
+    Push,
+
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
@@ -61,15 +64,17 @@ impl Lexer {
 
     fn lex_token(&mut self, token: &str) -> Result<Token, Box<dyn std::error::Error>> {
         match token.to_lowercase().as_str() {
+            "push" => Ok(Token::Keyword(Keyword::Push)),
+            "pop" => Ok(Token::Keyword(Keyword::Pop)),
+
             "mov" => Ok(Token::Keyword(Keyword::Mov)),
             "add" => Ok(Token::Keyword(Keyword::Add)),
 
+            "cmp" => Ok(Token::Keyword(Keyword::Cmp)),
             "jmp" => Ok(Token::Keyword(Keyword::Jmp)),
             "je" => Ok(Token::Keyword(Keyword::Je)),
             "jg" => Ok(Token::Keyword(Keyword::Jg)),
             "jb" => Ok(Token::Keyword(Keyword::Jb)),
-
-            "cmp" => Ok(Token::Keyword(Keyword::Cmp)),
 
             "syscall" => Ok(Token::Keyword(Keyword::Syscall)),
 
