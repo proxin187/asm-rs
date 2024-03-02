@@ -11,7 +11,7 @@ Asm-rs is an assembler for x86_64 linux with intel syntax.
    - Mov
    - Cmp
    - Jcc (jmp, je, jg, jb)
-   - Binary expr (add)
+   - Binary expr (add, sub, mul)
    - Stack (push, pop)
 
 

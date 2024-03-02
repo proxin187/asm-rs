@@ -1,8 +1,8 @@
+use crate::preprocessor::Preprocessor;
 use crate::parser::lexer::Register;
 use crate::parser::Parser;
 use crate::parser::Value;
 use crate::parser::Inst;
-use crate::preprocessor::Preprocessor;
 
 use faerie::{ArtifactBuilder, Artifact};
 use target_lexicon::triple;
@@ -10,6 +10,20 @@ use target_lexicon::triple;
 use std::process::Command;
 use std::str::FromStr;
 use std::fs::File;
+
+struct Opcode {
+    opcode: u8,
+    reg: u8,
+}
+
+impl Opcode {
+    pub fn new(opcode: u8, reg: u8) -> Opcode {
+        Opcode {
+            opcode,
+            reg,
+        }
+    }
+}
 
 pub struct Codegen {
     obj: Artifact,
@@ -87,6 +101,30 @@ impl Codegen {
         }
     }
 
+    fn encode_binary_expr(&mut self, lhs: Value, rhs: Value, opcodes: [Opcode; 3]) -> Result<(), Box<dyn std::error::Error>> {
+        if let Value::Register(rd) = lhs {
+            if let Value::Integer(id) = rhs {
+                if rd == Register::Eax {
+                    // [OPCODE] id
+                    self.buf.extend(&[vec![opcodes[0].opcode], Self::to_bytes(id)].concat());
+                    self.preprocessor.offset += 5;
+                } else {
+                    // [OPCODE] /[REG]
+                    self.buf.extend(&[vec![opcodes[1].opcode, Self::format_modrm(3, opcodes[1].reg, Self::rm(rd))], Self::to_bytes(id)].concat());
+                    self.preprocessor.offset += 6;
+                }
+            } else if let Value::Register(id) = rhs {
+                // [OPCODE] /r
+                self.buf.extend(&[opcodes[2].opcode, Self::format_modrm(3, Self::rm(id), Self::rm(rd))]);
+                self.preprocessor.offset += 2;
+            }
+
+            Ok(())
+        } else {
+            Err("cant add into non-register".into())
+        }
+    }
+
     fn build(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.obj.declarations(self.preprocessor.labels.iter().cloned())?;
 
@@ -116,6 +154,7 @@ impl Codegen {
                     Inst::Pop { dest } => {
                         // 58+ rd
                         self.buf.extend(&[0x58 + Self::rm(dest)]);
+                        self.preprocessor.offset += 1;
                     },
                     Inst::Mov { lhs, rhs } => {
                         if let Value::Register(rd) = lhs {
@@ -132,26 +171,11 @@ impl Codegen {
                             return Err("cant move into non-register".into());
                         }
                     },
-                    Inst::Add { lhs, rhs } => {
-                        if let Value::Register(rd) = lhs {
-                            if let Value::Integer(id) = rhs {
-                                if rd == Register::Eax {
-                                    // 05 id
-                                    self.buf.extend(&[vec![0x05], Self::to_bytes(id)].concat());
-                                    self.preprocessor.offset += 5;
-                                } else {
-                                    // 81 /0 id
-                                    self.buf.extend(&[vec![0x81, Self::format_modrm(3, 0, Self::rm(rd))], Self::to_bytes(id)].concat());
-                                    self.preprocessor.offset += 6;
-                                }
-                            } else if let Value::Register(id) = rhs {
-                                // 01 /r
-                                self.buf.extend(&[0x01, Self::format_modrm(3, Self::rm(id), Self::rm(rd))]);
-                                self.preprocessor.offset += 2;
-                            }
-                        } else {
-                            return Err("cant add into non-register".into());
-                        }
+                    Inst::Add { lhs, rhs } => self.encode_binary_expr(lhs, rhs, [Opcode::new(0x05, 0), Opcode::new(0x81, 0), Opcode::new(0x01, 0)])?,
+                    Inst::Sub { lhs, rhs } => self.encode_binary_expr(lhs, rhs, [Opcode::new(0x2d, 0), Opcode::new(0x81, 5), Opcode::new(0x29, 0)])?,
+                    Inst::Mul { dest } => {
+                        self.buf.extend(&[0xf7, Self::format_modrm(3, 4, Self::rm(dest))]);
+                        self.preprocessor.offset += 2;
                     },
                     Inst::Cmp { lhs, rhs } => {
                         if let Value::Register(rd) = lhs {

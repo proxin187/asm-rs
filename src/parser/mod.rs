@@ -53,6 +53,13 @@ pub enum Inst {
         lhs: Value,
         rhs: Value,
     },
+    Sub {
+        lhs: Value,
+        rhs: Value,
+    },
+    Mul {
+        dest: Register,
+    },
     Cmp {
         lhs: Value,
         rhs: Value,
@@ -139,6 +146,13 @@ impl Parser {
                             Keyword::Add => Ok(Some(Inst::Add {
                                 lhs: self.parse_expr(&SplitTokens::new(&tokens)?.lhs)?,
                                 rhs: self.parse_expr(&SplitTokens::new(&tokens)?.rhs)?,
+                            })),
+                            Keyword::Sub => Ok(Some(Inst::Sub {
+                                lhs: self.parse_expr(&SplitTokens::new(&tokens)?.lhs)?,
+                                rhs: self.parse_expr(&SplitTokens::new(&tokens)?.rhs)?,
+                            })),
+                            Keyword::Mul => Ok(Some(Inst::Mul {
+                                dest: self.parse_reg(&tokens)?,
                             })),
                             Keyword::Cmp => Ok(Some(Inst::Cmp {
                                 lhs: self.parse_expr(&SplitTokens::new(&tokens)?.lhs)?,

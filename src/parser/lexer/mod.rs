@@ -15,6 +15,8 @@ pub enum Keyword {
 
     Mov,
     Add,
+    Sub,
+    Mul,
 
     Pop,
     Push,
@@ -69,6 +71,8 @@ impl Lexer {
 
             "mov" => Ok(Token::Keyword(Keyword::Mov)),
             "add" => Ok(Token::Keyword(Keyword::Add)),
+            "sub" => Ok(Token::Keyword(Keyword::Sub)),
+            "mul" => Ok(Token::Keyword(Keyword::Mul)),
 
             "cmp" => Ok(Token::Keyword(Keyword::Cmp)),
             "jmp" => Ok(Token::Keyword(Keyword::Jmp)),

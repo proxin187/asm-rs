@@ -48,7 +48,7 @@ impl Preprocessor {
                                 self.offset += 2;
                             }
                         },
-                        Inst::Add { rhs, lhs } => {
+                        Inst::Add { rhs, lhs } | Inst::Sub { rhs, lhs } => {
                             if let Value::Register(rd) = lhs {
                                 if let Value::Integer(_) = rhs {
                                     if rd == Register::Eax {
@@ -61,6 +61,7 @@ impl Preprocessor {
                                 }
                             }
                         },
+                        Inst::Mul { .. } => self.offset += 2,
                         Inst::Cmp { lhs, rhs } => {
                             if let Value::Register(_) = lhs {
                                 if let Value::Integer(_) = rhs {

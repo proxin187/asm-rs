@@ -20,6 +20,11 @@ last:
     push ecx
     pop ecx
 
+    sub ecx, 1
+    sub ebx, edx
+
+    mul ebx
+
     mov edi, edx
     mov eax, 60
     syscall
