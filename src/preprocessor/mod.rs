@@ -1,4 +1,5 @@
 use crate::parser::lexer::Register;
+use crate::parser::ConstExpr;
 use crate::parser::Parser;
 use crate::parser::Value;
 use crate::parser::Inst;
@@ -7,7 +8,15 @@ use faerie::Decl;
 
 use std::collections::HashMap;
 
+#[derive(Clone)]
+pub struct Macro {
+    pub args: Vec<String>,
+    pub body: Vec<Inst>,
+}
+
 pub struct Preprocessor {
+    pub macros: HashMap<String, Macro>,
+    pub consts: HashMap<String, Value>,
     pub labels: Vec<(String, Decl)>,
     pub offsets: HashMap<String, usize>,
     pub offset: usize,
@@ -16,6 +25,8 @@ pub struct Preprocessor {
 impl Preprocessor {
     pub fn new() -> Preprocessor {
         Preprocessor {
+            macros: HashMap::new(),
+            consts: HashMap::new(),
             labels: Vec::new(),
             offsets: HashMap::new(),
             offset: 0x401000,
@@ -29,6 +40,20 @@ impl Preprocessor {
             if let Ok(inst) = inst {
                 if let Some(inst) = inst {
                     match inst {
+                        Inst::ConstExpr(constexpr) => {
+                            match constexpr.clone() {
+                                ConstExpr::Constant { ident, value } => {
+                                    self.consts.insert(ident, value);
+                                },
+                                ConstExpr::Macro { ident, args, body } => {
+                                    self.macros.insert(ident, Macro {
+                                        args,
+                                        body,
+                                    });
+                                },
+                                ConstExpr::Call { .. } => {},
+                            }
+                        },
                         Inst::Label { ident } => {
                             self.offsets.insert(ident.clone(), self.offset);
                             self.labels.push((ident, Decl::function().global().with_align(Some(1)).into()));

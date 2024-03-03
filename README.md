@@ -3,7 +3,7 @@
 > [!WARNING]
 > This assembler is a hobby project and shall not be used for anything professional
 
-Asm-rs is an assembler for x86_64 linux with intel syntax.
+Asm-rs is an assembler for x86_64 linux with fasm-like syntax.
 
 ## Features
  - Labels
@@ -13,5 +13,7 @@ Asm-rs is an assembler for x86_64 linux with intel syntax.
    - Jcc (jmp, je, jg, jb)
    - Binary expr (add, sub, mul)
    - Stack (push, pop)
+   - Constants (equ, =)
+   - Macros
 
 

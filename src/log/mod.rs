@@ -8,3 +8,4 @@ pub fn error(prefix: &str, message: &str) {
     println!("> {}:{}: {}", prefix, "error".red(), message);
 }
 
+

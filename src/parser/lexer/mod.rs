@@ -5,7 +5,8 @@ use std::fs::File;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum Keyword {
-    Syscall,
+    Macro,
+    Equ,
 
     Je,
     Jg,
@@ -21,6 +22,7 @@ pub enum Keyword {
     Pop,
     Push,
 
+    Syscall,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
@@ -39,6 +41,8 @@ pub enum Register {
 pub enum Symbol {
     Colon,
     Comma,
+    OpenBrace,
+    CloseBrace,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
@@ -66,6 +70,8 @@ impl Lexer {
 
     fn lex_token(&mut self, token: &str) -> Result<Token, Box<dyn std::error::Error>> {
         match token.to_lowercase().as_str() {
+            "syscall" => Ok(Token::Keyword(Keyword::Syscall)),
+
             "push" => Ok(Token::Keyword(Keyword::Push)),
             "pop" => Ok(Token::Keyword(Keyword::Pop)),
 
@@ -80,8 +86,6 @@ impl Lexer {
             "jg" => Ok(Token::Keyword(Keyword::Jg)),
             "jb" => Ok(Token::Keyword(Keyword::Jb)),
 
-            "syscall" => Ok(Token::Keyword(Keyword::Syscall)),
-
             "eax" => Ok(Token::Register(Register::Eax)),
             "ebx" => Ok(Token::Register(Register::Ebx)),
             "ecx" => Ok(Token::Register(Register::Ecx)),
@@ -91,6 +95,11 @@ impl Lexer {
             "esp" => Ok(Token::Register(Register::Esp)),
             "ebp" => Ok(Token::Register(Register::Ebp)),
 
+            "equ" | "=" => Ok(Token::Keyword(Keyword::Equ)),
+            "macro" => Ok(Token::Keyword(Keyword::Macro)),
+
+            "{" => Ok(Token::Symbol(Symbol::OpenBrace)),
+            "}" => Ok(Token::Symbol(Symbol::CloseBrace)),
             ":" => Ok(Token::Symbol(Symbol::Colon)),
             "," => Ok(Token::Symbol(Symbol::Comma)),
             _ => {

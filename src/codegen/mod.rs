@@ -1,5 +1,6 @@
 use crate::preprocessor::Preprocessor;
 use crate::parser::lexer::Register;
+use crate::parser::ConstExpr;
 use crate::parser::Parser;
 use crate::parser::Value;
 use crate::parser::Inst;
@@ -93,6 +94,7 @@ impl Codegen {
     fn encode_jcc(&mut self, opcode: &[u8], label: String) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(addr) = self.preprocessor.offsets.get(&label) {
             self.preprocessor.offset += opcode.len() + 4;
+
             self.buf.extend(&[opcode.to_vec(), Self::to_bytes((*addr as i32) - self.preprocessor.offset as i32)].concat());
 
             Ok(())
@@ -125,6 +127,116 @@ impl Codegen {
         }
     }
 
+    fn constexpr(&self, value: &Value) -> Result<Value, Box<dyn std::error::Error>> {
+        match value {
+            Value::Integer(_) | Value::Register(_) => Ok(value.clone()),
+            Value::Const(ident) => {
+                let constant = self.preprocessor.consts.get(ident).ok_or(format!("no such constant `{}`", ident))?;
+
+                Ok(self.constexpr(constant)?)
+            },
+        }
+    }
+
+    fn build_inst(&mut self, inst: Inst) -> Result<bool, Box<dyn std::error::Error>> {
+        match inst {
+            Inst::Label { ident } => {
+                self.define_label()?;
+
+                self.label = ident;
+            },
+            Inst::Push { value } => {
+                if let Value::Integer(id) = self.constexpr(&value)? {
+                    // 68 id
+                    self.buf.extend(&[vec![0x68], Self::to_bytes(id)].concat());
+                    self.preprocessor.offset += 5;
+                } else if let Value::Register(rd) = self.constexpr(&value)? {
+                    // FF /6
+                    self.buf.extend(&[0xff, Self::format_modrm(3, 6, Self::rm(rd))]);
+                    self.preprocessor.offset += 2;
+                }
+            },
+            Inst::Pop { dest } => {
+                // 58+ rd
+                self.buf.extend(&[0x58 + Self::rm(dest)]);
+                self.preprocessor.offset += 1;
+            },
+            Inst::Mov { lhs, rhs } => {
+                if let Value::Register(rd) = self.constexpr(&lhs)? {
+                    if let Value::Integer(id) = self.constexpr(&rhs)? {
+                        // B8+ rd id
+                        self.buf.extend(&[vec![0xb8 + Self::rm(rd)], Self::to_bytes(id)].concat());
+                        self.preprocessor.offset += 5;
+                    } else if let Value::Register(id) = self.constexpr(&rhs)? {
+                        // 89 /r
+                        self.buf.extend(&[0x89, Self::format_modrm(3, Self::rm(id), Self::rm(rd))]);
+                        self.preprocessor.offset += 2;
+                    }
+                } else {
+                    return Err("cant move into non-register".into());
+                }
+            },
+            Inst::Add { lhs, rhs } => self.encode_binary_expr(lhs, rhs, [Opcode::new(0x05, 0), Opcode::new(0x81, 0), Opcode::new(0x01, 0)])?,
+            Inst::Sub { lhs, rhs } => self.encode_binary_expr(lhs, rhs, [Opcode::new(0x2d, 0), Opcode::new(0x81, 5), Opcode::new(0x29, 0)])?,
+            Inst::Mul { dest } => {
+                self.buf.extend(&[0xf7, Self::format_modrm(3, 4, Self::rm(dest))]);
+                self.preprocessor.offset += 2;
+            },
+            Inst::Cmp { lhs, rhs } => {
+                if let Value::Register(rd) = self.constexpr(&lhs)? {
+                    if let Value::Integer(id) = self.constexpr(&rhs)? {
+                        // 81 /7 id
+                        self.buf.extend(&[vec![0x81, Self::format_modrm(3, 7, Self::rm(rd))], Self::to_bytes(id)].concat());
+                        self.preprocessor.offset += 6;
+                    } else if let Value::Register(id) = self.constexpr(&rhs)? {
+                        // 39 /r
+                        self.buf.extend(&[0x39, Self::format_modrm(3, Self::rm(id), Self::rm(rd))]);
+                        self.preprocessor.offset += 2;
+                    }
+                } else {
+                    return Err("cant cmp non register".into());
+                }
+            },
+            Inst::Jmp { label } => self.encode_jcc(&[0xe9], label)?,
+            Inst::Je { label } => self.encode_jcc(&[0x0f, 0x84], label)?,
+            Inst::Jg { label } => self.encode_jcc(&[0x0f, 0x8f], label)?,
+            Inst::Jb { label } => self.encode_jcc(&[0x0f, 0x82], label)?,
+            Inst::Syscall => {
+                self.buf.extend(&[0x0f, 0x05]);
+                self.preprocessor.offset += 2;
+            },
+            Inst::Eof => {
+                self.define_label()?;
+
+                return Ok(true);
+            },
+            Inst::ConstExpr(ConstExpr::Call { ident, args }) => {
+                let clone = self.preprocessor.macros.clone();
+                let macro_ = clone.get(&ident).ok_or::<Box<dyn std::error::Error>>(format!("no such macro `{}`", ident).into())?;
+
+                if args.len() != macro_.args.len() {
+                    return Err(format!("expected {} arguments but got {}", macro_.args.len(), args.len()).into());
+                }
+
+                let constants = self.preprocessor.consts.clone();
+                {
+                    for (index, arg) in args.iter().enumerate() {
+                        self.preprocessor.consts.insert(macro_.args[index].clone(), arg.clone());
+                    }
+
+                    for inst in &macro_.body {
+                        self.build_inst(inst.clone())?;
+                    }
+                }
+
+                self.preprocessor.consts = constants;
+            },
+            Inst::ConstExpr(_) => {},
+        }
+
+        Ok(false)
+    }
+
     fn build(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.obj.declarations(self.preprocessor.labels.iter().cloned())?;
 
@@ -134,77 +246,8 @@ impl Codegen {
             self.line += 1;
 
             if let Some(inst) = inst {
-                match inst {
-                    Inst::Label { ident } => {
-                        self.define_label()?;
-
-                        self.label = ident;
-                    },
-                    Inst::Push { value } => {
-                        if let Value::Integer(id) = value {
-                            // 68 id
-                            self.buf.extend(&[vec![0x68], Self::to_bytes(id)].concat());
-                            self.preprocessor.offset += 5;
-                        } else if let Value::Register(rd) = value {
-                            // FF /6
-                            self.buf.extend(&[0xff, Self::format_modrm(3, 6, Self::rm(rd))]);
-                            self.preprocessor.offset += 2;
-                        }
-                    },
-                    Inst::Pop { dest } => {
-                        // 58+ rd
-                        self.buf.extend(&[0x58 + Self::rm(dest)]);
-                        self.preprocessor.offset += 1;
-                    },
-                    Inst::Mov { lhs, rhs } => {
-                        if let Value::Register(rd) = lhs {
-                            if let Value::Integer(id) = rhs {
-                                // B8+ rd id
-                                self.buf.extend(&[vec![0xb8 + Self::rm(rd)], Self::to_bytes(id)].concat());
-                                self.preprocessor.offset += 5;
-                            } else if let Value::Register(id) = rhs {
-                                // 89 /r
-                                self.buf.extend(&[0x89, Self::format_modrm(3, Self::rm(id), Self::rm(rd))]);
-                                self.preprocessor.offset += 2;
-                            }
-                        } else {
-                            return Err("cant move into non-register".into());
-                        }
-                    },
-                    Inst::Add { lhs, rhs } => self.encode_binary_expr(lhs, rhs, [Opcode::new(0x05, 0), Opcode::new(0x81, 0), Opcode::new(0x01, 0)])?,
-                    Inst::Sub { lhs, rhs } => self.encode_binary_expr(lhs, rhs, [Opcode::new(0x2d, 0), Opcode::new(0x81, 5), Opcode::new(0x29, 0)])?,
-                    Inst::Mul { dest } => {
-                        self.buf.extend(&[0xf7, Self::format_modrm(3, 4, Self::rm(dest))]);
-                        self.preprocessor.offset += 2;
-                    },
-                    Inst::Cmp { lhs, rhs } => {
-                        if let Value::Register(rd) = lhs {
-                            if let Value::Integer(id) = rhs {
-                                // 81 /7 id
-                                self.buf.extend(&[vec![0x81, Self::format_modrm(3, 7, Self::rm(rd))], Self::to_bytes(id)].concat());
-                                self.preprocessor.offset += 6;
-                            } else if let Value::Register(id) = rhs {
-                                // 39 /r
-                                self.buf.extend(&[0x39, Self::format_modrm(3, Self::rm(id), Self::rm(rd))]);
-                                self.preprocessor.offset += 2;
-                            }
-                        } else {
-                            return Err("cant cmp non register".into());
-                        }
-                    },
-                    Inst::Jmp { label } => self.encode_jcc(&[0xe9], label)?,
-                    Inst::Je { label } => self.encode_jcc(&[0x0f, 0x84], label)?,
-                    Inst::Jg { label } => self.encode_jcc(&[0x0f, 0x8f], label)?,
-                    Inst::Jb { label } => self.encode_jcc(&[0x0f, 0x82], label)?,
-                    Inst::Syscall => {
-                        self.buf.extend(&[0x0f, 0x05]);
-                        self.preprocessor.offset += 2;
-                    },
-                    Inst::Eof => {
-                        self.define_label()?;
-
-                        break;
-                    },
+                if self.build_inst(inst)? {
+                    break;
                 }
             }
 

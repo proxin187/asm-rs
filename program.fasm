@@ -1,4 +1,15 @@
 
+SYS_EXIT equ 60
+EXIT_REG = eax
+
+macro syscall2 arg1, arg2
+{
+    mov edi, arg2
+    mov EXIT_REG, arg1
+    syscall
+}
+
+
 _start:
     mov ecx, 0
 
@@ -25,8 +36,6 @@ last:
 
     mul ebx
 
-    mov edi, edx
-    mov eax, 60
-    syscall
+    syscall2 SYS_EXIT, edx
 
 
